@@ -9,6 +9,13 @@ const STAGE_LABELS = {
   ocr_frame_analysis: 'Analyzing frame text',
   visual_cooking_analysis: 'Inferring cooking actions',
   recipe_synthesis: 'Synthesizing recipe',
+  metadata_extraction_done: 'Metadata stage complete',
+  audio_transcription_done: 'Transcription stage complete',
+  ocr_frame_analysis_done: 'OCR stage complete',
+  visual_cooking_analysis_done: 'Vision stage complete',
+  recipe_synthesis_done: 'Synthesis stage complete',
+  provider_wait: 'Waiting for providers',
+  provider_retry: 'Applying fallback strategy',
   complete: 'Complete'
 };
 
@@ -29,6 +36,7 @@ export default function App() {
   const [stage, setStage] = useState('queued');
   const [events, setEvents] = useState([]);
   const [playbackMode, setPlaybackMode] = useState('video');
+  const [expandedEvidence, setExpandedEvidence] = useState({});
 
   const stageTitle = useMemo(() => STAGE_LABELS[stage] || 'Processing', [stage]);
   const reliabilityState = useMemo(() => {
@@ -47,6 +55,14 @@ export default function App() {
       error: status?.error || null
     }));
   }, [recipe]);
+
+  const lowReliabilityMode = useMemo(() => {
+    if (!recipe) return false;
+    const m = recipe.confidenceSummary?.multimodal ?? 0;
+    const g = recipe.confidenceSummary?.grounding ?? 0;
+    const providerDown = providerSummary.some((p) => !p.active);
+    return m < 0.5 || g < 0.5 || providerDown;
+  }, [recipe, providerSummary]);
 
   function addEvent(message) {
     setEvents((prev) => [...prev.slice(-4), message]);
@@ -107,12 +123,12 @@ export default function App() {
   }
 
   function copyRecipe() {
-    if (!recipe) return;
+    if (!recipe || lowReliabilityMode) return;
     navigator.clipboard.writeText(toMarkdown(recipe));
   }
 
   function exportText() {
-    if (!recipe) return;
+    if (!recipe || lowReliabilityMode) return;
     const blob = new Blob([toMarkdown(recipe)], { type: 'text/markdown;charset=utf-8' });
     const href = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -144,7 +160,7 @@ export default function App() {
             <span>{progress}%</span>
           </div>
           <div className="progress-track"><div className="progress-fill" style={{ width: `${progress}%` }} /></div>
-          <div className="events">{events.map((e) => <p key={e}>{e}</p>)}</div>
+          <div className="events">{events.map((e, idx) => <p key={`${e}-${idx}`}>{e}</p>)}</div>
         </section>
 
         {recipe ? (
@@ -159,17 +175,19 @@ export default function App() {
                   <span>Servings: {recipe.servings}</span>
                   <span>Difficulty: {recipe.difficulty}</span>
                   <span>Cuisine: {recipe.cuisine}</span>
-                  <span className="badge">Confidence {recipe.confidenceSummary.overall}</span>
+                  <span className="badge" title="Combined score weighted from grounding and multimodal confidence">Overall {recipe.confidenceSummary.overall}</span>
+                  <span className="badge badge-grounding" title={recipe.confidenceSummary?.explanation?.grounding}>Grounding {recipe.confidenceSummary.grounding}</span>
+                  <span className="badge badge-multimodal" title={recipe.confidenceSummary?.explanation?.multimodal}>Multimodal {recipe.confidenceSummary.multimodal}</span>
                   <span className={`badge badge-${reliabilityState.tone}`}>{reliabilityState.label}</span>
                 </div>
               </div>
               {recipe.thumbnailUrl ? <img src={recipe.thumbnailUrl} alt="Reel preview" /> : null}
             </div>
 
-            {providerSummary.some((p) => !p.active) ? (
+            {lowReliabilityMode ? (
               <div className="fallback-banner">
-                <strong>Fallback mode active</strong>
-                <p>One or more providers were unavailable. Extraction is grounded but may be incomplete.</p>
+                <strong>Low reliability extraction mode</strong>
+                <p>Partial grounded extraction only. Some multimodal providers are unavailable, so this output should be reviewed before use.</p>
               </div>
             ) : null}
 
@@ -209,7 +227,26 @@ export default function App() {
                     <strong>{item.name}</strong>
                     <span>{item.quantity}</span>
                     <small>source: {item.source.join(', ')}</small>
-                    {item.evidence?.snippet ? <small>evidence: {item.evidence.snippet}</small> : null}
+                    {item.evidence?.snippet ? (
+                      <small>
+                        evidence:{' '}
+                        <span className={expandedEvidence[`${item.name}-${item.quantity}`] ? 'evidence-full' : 'evidence-truncated'}>
+                          {item.evidence.snippet}
+                        </span>
+                        {item.evidence.snippet.length > 80 ? (
+                          <button
+                            type="button"
+                            className="text-toggle"
+                            onClick={() => setExpandedEvidence((prev) => ({
+                              ...prev,
+                              [`${item.name}-${item.quantity}`]: !prev[`${item.name}-${item.quantity}`]
+                            }))}
+                          >
+                            {expandedEvidence[`${item.name}-${item.quantity}`] ? 'less' : 'more'}
+                          </button>
+                        ) : null}
+                      </small>
+                    ) : null}
                     <div className="meter"><div style={{ width: `${Math.round(item.confidence * 100)}%` }} /></div>
                   </div>
                 </article>
@@ -229,22 +266,25 @@ export default function App() {
             <h3>Uncertainty Notes</h3>
             <ul className="warnings">{recipe.signals.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
 
-            <h3>Source Provenance</h3>
-            <div className="provenance-grid">
-              <p><strong>Transcript:</strong> {recipe.trace?.providers?.transcript || 'unknown'}</p>
-              <p><strong>OCR:</strong> {recipe.trace?.providers?.ocr || 'unknown'}</p>
-              <p><strong>Synthesis:</strong> {recipe.trace?.providers?.synthesis || 'unknown'}</p>
-              <p><strong>Reference URL:</strong> <a href={recipe.references?.reelUrl} target="_blank" rel="noreferrer">Open reel</a></p>
-              <p><strong>Provider errors:</strong> {providerSummary.filter((p) => p.error).map((p) => `${p.name}: ${p.error}`).join(' | ') || 'none'}</p>
-            </div>
+            <details className="diagnostics" open={false}>
+              <summary>Advanced diagnostics</summary>
+              <div className="provenance-grid">
+                <p><strong>Transcript:</strong> {recipe.trace?.providers?.transcript || 'unknown'}</p>
+                <p><strong>OCR:</strong> {recipe.trace?.providers?.ocr || 'unknown'}</p>
+                <p><strong>Synthesis:</strong> {recipe.trace?.providers?.synthesis || 'unknown'}</p>
+                <p><strong>Reference URL:</strong> <a href={recipe.references?.reelUrl} target="_blank" rel="noreferrer">Open reel</a></p>
+                <p><strong>Provider errors:</strong> {providerSummary.filter((p) => p.error).map((p) => `${p.name}: ${p.error}`).join(' | ') || 'none'}</p>
+              </div>
+            </details>
 
             <h3>Estimated Nutrition</h3>
             <p className="nutrition">Nutrition model integration placeholder: estimated calories/macros will appear here in a future revision.</p>
 
             <div className="actions">
-              <button onClick={copyRecipe}>Copy Recipe</button>
-              <button onClick={exportText}>Export Markdown</button>
+              <button onClick={copyRecipe} disabled={lowReliabilityMode} title={lowReliabilityMode ? 'Disabled in low-reliability mode' : ''}>Copy Recipe</button>
+              <button onClick={exportText} disabled={lowReliabilityMode} title={lowReliabilityMode ? 'Disabled in low-reliability mode' : ''}>Export Markdown</button>
             </div>
+            {lowReliabilityMode ? <p className="low-rel-note">Export actions are disabled until reliability improves.</p> : null}
           </section>
         ) : null}
       </main>

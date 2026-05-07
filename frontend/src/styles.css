@@ -71,6 +71,8 @@ button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 16p
 .meta-row { display: flex; flex-wrap: wrap; gap: 8px; color: var(--muted); }
 .meta-row span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; background: #fff7ec; font-size: 12px; }
 .badge { color: #9f4d21; font-weight: 700; }
+.badge-grounding { background: #e8f6de !important; color: #2f6d2d !important; border-color: #b9d7a6 !important; }
+.badge-multimodal { background: #e6eefc !important; color: #2e4e95 !important; border-color: #b6c9ef !important; }
 .badge-low { background: #ffe1dc !important; color: #9d3020 !important; border-color: #efb2a7 !important; }
 .badge-medium { background: #fff0d8 !important; color: #8f5e13 !important; border-color: #e8cb97 !important; }
 .badge-high { background: #e8f6de !important; color: #3f6b28 !important; border-color: #bddf9f !important; }
@@ -98,6 +100,23 @@ button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 16p
 .ingredient.low { background: #fff3df; border-color: #e4bc82; }
 .ingredient div { display: grid; gap: 4px; }
 .ingredient span, .ingredient small { color: var(--muted); font-size: 12px; }
+.evidence-truncated {
+  display: inline-block;
+  max-width: 220px;
+  vertical-align: bottom;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.evidence-full { white-space: normal; }
+.text-toggle {
+  background: transparent;
+  color: #8f4b22;
+  border: 0;
+  padding: 0 0 0 5px;
+  font-size: 11px;
+  text-decoration: underline;
+}
 
 .meter { height: 8px; border-radius: 999px; overflow: hidden; background: #f0dfcb; }
 .meter > div { height: 100%; background: linear-gradient(90deg, #ebb25f, #84aa55); }
@@ -167,6 +186,24 @@ button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 16p
 .provenance-grid p { margin: 0; font-size: 13px; color: var(--muted); }
 .provenance-grid a { color: #a24c22; }
 
+.diagnostics {
+  margin-top: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 8px;
+  background: #fffaf2;
+}
+.diagnostics summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #6e4a2e;
+}
+.low-rel-note {
+  margin: 8px 0 0;
+  color: #8a4f24;
+  font-size: 12px;
+}
+
 @media (max-width: 780px) {
   .page { padding: 12px; }
   .extract-form { grid-template-columns: 1fr; }
@@ -174,4 +211,13 @@ button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 16p
   .ingredients-grid { grid-template-columns: 1fr; }
   .provider-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .provenance-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 420px) {
+  .meta-row { gap: 6px; }
+  .meta-row span { font-size: 11px; padding: 6px 8px; }
+  .provider-strip { grid-template-columns: 1fr; gap: 6px; }
+  .playback-controls { gap: 6px; }
+  .chip { padding: 10px 12px; }
+  .evidence-truncated { max-width: 150px; }
 }

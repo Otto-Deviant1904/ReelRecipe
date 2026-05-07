@@ -25,13 +25,16 @@ function buildGroundedFromCaption(parsed) {
     inferred: false
   }));
 
-  const steps = parsed.steps.map((step) => ({
-    stepNumber: step.stepNumber,
-    instruction: step.instruction,
-    estimatedTime: inferStepTime(step.instruction),
-    confidence: 0.9,
-    evidence: { source: 'caption', snippet: step.instruction }
-  }));
+  const steps = parsed.steps.map((step) => {
+    const inferredTime = inferStepTime(step.instruction);
+    return {
+      stepNumber: step.stepNumber,
+      instruction: step.instruction,
+      estimatedTime: inferredTime === '~unknown' ? 'Timing unavailable' : inferredTime,
+      confidence: inferredTime === '~unknown' ? 0.35 : 0.9,
+      evidence: { source: 'caption', snippet: step.instruction }
+    };
+  });
 
   return { ingredients, steps };
 }
@@ -95,8 +98,8 @@ export async function synthesizeRecipe({ metadata, transcript, ocr, vision }) {
     steps = safeTranscript.segments.slice(0, 5).map((seg, idx) => ({
       stepNumber: idx + 1,
       instruction: seg.text,
-      estimatedTime: '~unknown',
-      confidence: 0.45,
+      estimatedTime: 'Timing unavailable',
+      confidence: 0.35,
       evidence: { source: 'audio', snippet: seg.text }
     }));
   }
@@ -114,9 +117,33 @@ export async function synthesizeRecipe({ metadata, transcript, ocr, vision }) {
     warnings.push(...consistency.issues);
   }
 
-  const providerPenalty = [safeTranscript, safeOcr].reduce((acc, src) => acc + (src.provider === 'fallback_mock' ? 0.12 : 0), 0);
-  const base = parsedCaption.hasStructuredRecipe ? 0.9 : 0.52;
-  const overall = Math.max(0.15, Number((base - providerPenalty - consistency.contradictionPenalty).toFixed(2)));
+  const groundedCoverage = parsedCaption.hasStructuredRecipe
+    ? Math.min(1, ((ingredients.length > 0 ? 0.5 : 0) + (steps.length > 0 ? 0.5 : 0)))
+    : Math.min(1, ((ingredients.length > 0 ? 0.35 : 0) + (steps.length > 0 ? 0.35 : 0)));
+
+  const groundingConfidence = Math.max(
+    0.2,
+    Number((
+      (parsedCaption.hasStructuredRecipe ? 0.82 : 0.42) +
+      groundedCoverage * 0.18 -
+      consistency.contradictionPenalty
+    ).toFixed(2))
+  );
+
+  const totalProviders = 4;
+  const liveProviders = [
+    metadata.provider === 'instagram_og',
+    safeTranscript.provider !== 'fallback_mock',
+    safeOcr.provider !== 'fallback_mock',
+    llm.ok
+  ].filter(Boolean).length;
+  const providerAvailability = liveProviders / totalProviders;
+  const multimodalConfidence = Math.max(
+    0.1,
+    Number((providerAvailability * 0.75 + (1 - consistency.contradictionPenalty) * 0.25).toFixed(2))
+  );
+
+  const overall = Number(((groundingConfidence * 0.65) + (multimodalConfidence * 0.35)).toFixed(2));
 
   const baseRecipe = {
     title: parsedCaption.titleFromCaption || metadata.titleHint || 'Reel Recipe (Extracted)',
@@ -130,7 +157,15 @@ export async function synthesizeRecipe({ metadata, transcript, ocr, vision }) {
     servings: parsedCaption.servings || '~unknown',
     difficulty: parsedCaption.hasStructuredRecipe ? 'Medium' : 'Unknown',
     cuisine: /chipotle|enchilada|tajin|adobo/i.test(parsedCaption.normalizedCaption) ? 'Mexican-inspired' : 'Unspecified',
-    confidenceSummary: { overall },
+    confidenceSummary: {
+      overall,
+      grounding: groundingConfidence,
+      multimodal: multimodalConfidence,
+      explanation: {
+        grounding: 'Evidence quality from explicit source text and consistency checks.',
+        multimodal: 'Confidence from live provider participation and cross-signal availability.'
+      }
+    },
     signals: {
       warnings,
       stageConfidence: {
