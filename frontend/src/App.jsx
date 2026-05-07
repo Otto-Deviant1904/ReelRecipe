@@ -31,6 +31,22 @@ export default function App() {
   const [playbackMode, setPlaybackMode] = useState('video');
 
   const stageTitle = useMemo(() => STAGE_LABELS[stage] || 'Processing', [stage]);
+  const reliabilityState = useMemo(() => {
+    if (!recipe) return { label: 'Awaiting input', tone: 'neutral' };
+    const c = recipe.confidenceSummary?.overall ?? 0;
+    if (c < 0.45) return { label: 'Low reliability', tone: 'low' };
+    if (c < 0.75) return { label: 'Moderate reliability', tone: 'medium' };
+    return { label: 'High reliability', tone: 'high' };
+  }, [recipe]);
+
+  const providerSummary = useMemo(() => {
+    if (!recipe?.trace?.providerStatus) return [];
+    return Object.entries(recipe.trace.providerStatus).map(([name, status]) => ({
+      name,
+      active: Boolean(status?.active),
+      error: status?.error || null
+    }));
+  }, [recipe]);
 
   function addEvent(message) {
     setEvents((prev) => [...prev.slice(-4), message]);
@@ -132,7 +148,7 @@ export default function App() {
         </section>
 
         {recipe ? (
-          <section className="card result">
+          <section className={`card result reliability-${reliabilityState.tone}`}>
             <div className="result-top">
               <div>
                 <h2>{recipe.title}</h2>
@@ -144,10 +160,18 @@ export default function App() {
                   <span>Difficulty: {recipe.difficulty}</span>
                   <span>Cuisine: {recipe.cuisine}</span>
                   <span className="badge">Confidence {recipe.confidenceSummary.overall}</span>
+                  <span className={`badge badge-${reliabilityState.tone}`}>{reliabilityState.label}</span>
                 </div>
               </div>
               {recipe.thumbnailUrl ? <img src={recipe.thumbnailUrl} alt="Reel preview" /> : null}
             </div>
+
+            {providerSummary.some((p) => !p.active) ? (
+              <div className="fallback-banner">
+                <strong>Fallback mode active</strong>
+                <p>One or more providers were unavailable. Extraction is grounded but may be incomplete.</p>
+              </div>
+            ) : null}
 
             <h3>Reel Reference Playback</h3>
             <div className="playback-controls">
@@ -168,6 +192,15 @@ export default function App() {
               )}
             </div>
 
+            <div className="provider-strip">
+              {providerSummary.map((provider) => (
+                <div key={provider.name} className={`provider-pill ${provider.active ? 'ok' : 'down'}`}>
+                  <span>{provider.name}</span>
+                  <small>{provider.active ? 'live' : 'fallback'}</small>
+                </div>
+              ))}
+            </div>
+
             <h3>Ingredients</h3>
             <div className="ingredients-grid">
               {recipe.ingredients.map((item) => (
@@ -176,6 +209,7 @@ export default function App() {
                     <strong>{item.name}</strong>
                     <span>{item.quantity}</span>
                     <small>source: {item.source.join(', ')}</small>
+                    {item.evidence?.snippet ? <small>evidence: {item.evidence.snippet}</small> : null}
                     <div className="meter"><div style={{ width: `${Math.round(item.confidence * 100)}%` }} /></div>
                   </div>
                 </article>
@@ -201,6 +235,7 @@ export default function App() {
               <p><strong>OCR:</strong> {recipe.trace?.providers?.ocr || 'unknown'}</p>
               <p><strong>Synthesis:</strong> {recipe.trace?.providers?.synthesis || 'unknown'}</p>
               <p><strong>Reference URL:</strong> <a href={recipe.references?.reelUrl} target="_blank" rel="noreferrer">Open reel</a></p>
+              <p><strong>Provider errors:</strong> {providerSummary.filter((p) => p.error).map((p) => `${p.name}: ${p.error}`).join(' | ') || 'none'}</p>
             </div>
 
             <h3>Estimated Nutrition</h3>
