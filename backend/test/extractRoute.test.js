@@ -16,9 +16,9 @@ test('rejects unsupported host', async () => {
   assert.match(res.body.error, /Unsupported platform/i);
 });
 
-test('extracts recipe with ingredient images', async () => {
+test('extracts grounded recipe ingredients', async () => {
   const res = await request(app).post('/api/extract').send({ url: 'https://www.instagram.com/reel/abc123/' });
   assert.equal(res.statusCode, 200);
   assert.ok(Array.isArray(res.body.ingredients));
-  assert.ok(res.body.ingredients.every((i) => typeof i.imageUrl === 'string' && i.imageUrl.length > 0));
+  assert.ok(res.body.ingredients.every((i) => typeof i.name === 'string' && typeof i.quantity === 'string'));
 });

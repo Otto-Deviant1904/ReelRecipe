@@ -2,11 +2,6 @@ import { synthesizeWithLlmIfConfigured } from './aiClientService.js';
 import { parseCaptionRecipe } from './captionParseService.js';
 import { evaluateConsistency } from './consistencyService.js';
 
-function ingredientImage(name) {
-  const slug = (name || 'ingredient').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  return `https://picsum.photos/seed/ingredient-${slug}/240/160`;
-}
-
 function inferStepTime(instruction) {
   const m = instruction.match(/(\d+\s*(?:-|to)?\s*\d*\s*(?:hours?|hrs?|minutes?|mins?))/i);
   return m ? m[1] : '~unknown';
@@ -27,8 +22,7 @@ function buildGroundedFromCaption(parsed) {
     confidence: 0.93,
     source: ['caption'],
     evidence: { source: 'caption', snippet: `${it.name} ${it.quantity}` },
-    inferred: false,
-    imageUrl: ingredientImage(it.name)
+    inferred: false
   }));
 
   const steps = parsed.steps.map((step) => ({
@@ -96,8 +90,7 @@ export async function synthesizeRecipe({ metadata, transcript, ocr, vision }) {
       confidence: 0.45,
       source: ['vision'],
       evidence: { source: 'vision', snippet: `Visible ingredient: ${it.name}` },
-      inferred: true,
-      imageUrl: ingredientImage(it.name)
+      inferred: true
     }));
     steps = safeTranscript.segments.slice(0, 5).map((seg, idx) => ({
       stepNumber: idx + 1,

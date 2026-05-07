@@ -172,7 +172,6 @@ export default function App() {
             <div className="ingredients-grid">
               {recipe.ingredients.map((item) => (
                 <article key={`${item.name}-${item.quantity}`} className={`ingredient ${item.confidence < 0.7 ? 'low' : ''}`}>
-                  <img src={item.imageUrl} alt={`${item.name} reference`} />
                   <div>
                     <strong>{item.name}</strong>
                     <span>{item.quantity}</span>
